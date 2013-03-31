@@ -59,12 +59,12 @@ struct vlab_memoize_stat_s {
 
 extend sn_util {
    -- create an instance of the manager struct (needs to be constructed before generation)
-   !mz_manager: vlab_memoize_manager;
+   !mz_manager: vlab_memoize_manager_s;
    init() is also { mz_manager = new };
 };
 
 -- Struct that holds global data and methods for meoization
-struct vlab_memoize_manager like any_struct {
+struct vlab_memoize_manager_s like any_struct {
 
    -- Returns TRUE if a struct has only physical fields; prints a warning (and returns FALSE)
    -- if called with a non-struct or unknown type name
@@ -87,9 +87,6 @@ struct vlab_memoize_manager like any_struct {
                   };
                } else if t_field is a rf_list (rlf) { -- field is a list
                   result = deep_is_physical( rlf.get_element_type().get_qualified_name());
-                  // if t_listelem is a rf_struct (rsfl_struct) { -- field is a list of structs
-                  //    if rsfl_struct != rs {
-                  //       result = vlab_is_physical(t_listelem.get_qualified_name());
                };
             };
          };
@@ -140,7 +137,7 @@ struct vlab_memoize_manager like any_struct {
          };
       };
    };
-}; -- vlab_memoize_manager 
+}; -- vlab_memoize_manager_s 
 
   
 #ifdef DEBUG_MEMOIZE {
@@ -216,9 +213,6 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
       rl.add(appendf("      var %s0:%s;                                                              ", i_names[i], i_types[i]));
    };
    rl.add(appendf("      var r0%s;                                                                   ", ret_type));
-   //rl.add(appendf("      unpack(%s,entry.input,%s0);                                                 ", packing_option, str_join(i_names,"0,")));
-   //rl.add(appendf("      if %s {                                                                     ", 
-   //               str_join(i_names.apply(appendf("deep_compare(%s0,%s,1).is_empty()", it, it)), " and ")));
    rl.add(appendf("      if entry.input == search_input {"));
                   rl.add(appendf("         unpack(%s, entry.output, r0);                                            ", packing_option));
    rl.add(appendf("         result = r0;                                                             "));

@@ -39,7 +39,7 @@ struct vec_s {
    };
 };
 
-extend vlab_memoize_manager {
+extend vlab_memoize_manager_s {
    -- test the deep_is_physical method
    run() is also {
       check that not util.mz_manager.deep_is_physical("test_a");
