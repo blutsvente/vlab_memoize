@@ -89,8 +89,12 @@ extend sys {
       };
    };
      
+   setup() is also {
+      set_config(print, radix, HEX);
+   };
+   
    run() is also {
-      -- test the deep_is_physical method
+      -- test the check_is_physical() method
       check that not util.mz_manager.check_is_physical("test_a");
       check that not util.mz_manager.check_is_physical("test_b");
       check that not util.mz_manager.check_is_physical("test_c");
@@ -109,17 +113,19 @@ extend sys {
    
    go()@sys.any is {
       out("-----------------\n");
-      //s3 = foo_compare(s1,s2);
-      //s3 = foo_compare(s3,s2);
-      //s3 = foo_compare(s1,s2);
+      s3 = foo_compare(s1,s2);
+      s3 = foo_compare(s3,s2);
+      s3 = foo_compare(s1,s2);
 
       out("-----------------\n");
  
       jimbob_compare(3141, jim);
       jimbob_compare(13, bob);
       bob = deep_copy(jim);
+      jimbob_compare(13, jim);
       jimbob_compare(3141, bob);
-      out("-----------------\n");
+      jimbob_compare(3141, jim);
+     out("-----------------\n");
      
       stop_run();
    };
@@ -128,18 +134,13 @@ extend sys {
    foo_core(x: vec_s, y: vec_s): vec_s is {
       result = new with { .a = x.a + y.a; .b = x.b + y.b };
    };
-   jimbob_core(in1: uint, in2: complex_s): list of complex_s is {
+   jimbob_core(in1: uint, in2: complex_s): complex_s is {
       var r1: complex_s = new with {
          .a  = in1 << 4;
          .lc = in2.lc.reverse();
-         .en = in2.en;
-      };
-      var r2: complex_s = new with {
-         .a  = in1 << 8;
-         .lc = {GREEN; BLUE};
          .en = not in2.en;
       };
-      result.add({r1;r2});
+      result = r1;
    };
    
    
@@ -147,24 +148,22 @@ extend sys {
    MEMOIZE MAX_ENTRIES = 500 PACKING = packing.low foo(x: vec_s, y: vec_s): vec_s@sys.any is {
       result = foo_core(x, y);
    };
-   MEMOIZE jimbob(a: uint, b: complex_s): list of complex_s is {
-      result.add(jimbob_core(a, b));
+   MEMOIZE jimbob(a: uint, b: complex_s): complex_s is {
+      result = jimbob_core(a, b);
    };
    
    ------ for testing, call memoized and original function and compare the results
-   foo_compare(x: vec_s, y: vec_s): vec_s@sys.any is {
+   foo_compare(x: vec_s, y: vec_s):vec_s@sys.any is {
       var s: vec_s = foo(x, y);
-      check that deep_compare(s, foo_core(x,y), 1).size() == 0;
+      check that deep_compare(s, foo_core(x, y), 1).size() == 0;
       out( x.display_str(), " + ", y.display_str(), " = ", s.display_str(),"\n" );
       result = s;
    };
    jimbob_compare(in1: uint, in2: complex_s) is {
-      var s: list of complex_s = jimbob(in1,  in2);
-      var j:  list of complex_s = jimbob_core(in1, in2);
-      for each in s {
-         check that deep_compare(it, j[index], 1).size() == 0;
-      };
-      outf("in1: 0x%x\nin2: %s\nresult = {%s} {%s}\n", in1, in2.display_str(), s[0].display_str(), s[1].display_str());
+      var s: complex_s = jimbob(in1,  in2);
+      var j: complex_s = jimbob_core(in1, in2);
+      check that deep_compare(s, j, 1).size() == 0;
+      outf("in1: 0x%x\nin2: %s\nresult = {%s}\n", in1, in2.display_str(), s.display_str());
    };
 };
 
