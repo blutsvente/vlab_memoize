@@ -40,7 +40,7 @@ Description     : Core package module of vlab_memoize
 package vlab_memoize;
 
 -- Cache entry data type
-struct vlab_memoize_cache_entries_s {
+struct vlab_memoize_cache_entry_s {
    !hash   : uint;
    !input  : list of byte;
    !output : list of byte;
@@ -66,33 +66,53 @@ extend sn_util {
 -- Struct that holds global data and methods for meoization
 struct vlab_memoize_manager_s like any_struct {
 
-   -- Returns TRUE if a struct has only physical fields; prints a warning (and returns FALSE)
-   -- if called with a non-struct or unknown type name
-   deep_is_physical(name: string): bool is {
-      var t: rf_type = rf_manager.get_type_by_name(name);
+   -- Control the fitness check for packing of compound types as method parameters. Disable this if you use a custom
+   -- packing method that does not require it.
+   packing_requires_physical_fields: bool;
+   keep soft packing_requires_physical_fields;
+   
+   -- Returns TRUE if a struct/list has only physical fields; prints a warning (and returns FALSE)
+   -- if called with a non-struct/list.
+   -- This function traverses the object tree; it stops where an instance does not have "normal" as deep_copy attribute.
+   deep_is_physical(t: rf_type): bool is {
+      result = TRUE;
       if t is a rf_list (rl) {
-         result = TRUE;
          var t_listelem := rl.get_element_type();
          if (t_listelem is a rf_struct) or (t_listelem is a rf_list) { -- field is a list of structs or list of lists
-            result = deep_is_physical(t_listelem.get_qualified_name());
+            result = deep_is_physical(t_listelem);
          };
       } else if t is a rf_struct (rs) {
          for each (field) in rs.get_fields() { -- iterate over all fields of the struct
             if field.is_physical() {
                var t_field := field.get_type();
-               if t_field is a rf_struct (rsf) { -- field is a struct itself
-                  if rsf != rs {
-                     var t_struct := field.get_type();
-                     result = deep_is_physical(t_struct.get_qualified_name());
-                  };
-               } else if t_field is a rf_list (rlf) { -- field is a list
-                  result = deep_is_physical( rlf.get_element_type().get_qualified_name());
+               if (field.get_deep_copy_attr(rs) == normal) and ( -- stop at reference/ignore
+                  (t_field is a rf_struct (rsf))                 -- field is a struct itself
+                  or (t_field is a rf_list))                     -- field is a list
+               { 
+                  result = deep_is_physical(t_field);
                };
+            } else {
+               result = FALSE; -- not a physical field
+            };
+            if not result {
+               break;
             };
          };
       } else {
          result = FALSE;
-         warning("method deep_is_physical() called with type name \"", name, "\" (expected a struct or list but got a \"", (t == NULL ? "unknown" : t.get_qualified_name()),"\")");
+         warning("method deep_is_physical() called with type name \"", t.get_qualified_name(), "\" (expected a struct or list but got a \"", (t == NULL ? "unknown" : t.get_qualified_name()),"\")");
+      };
+   };
+   
+   -- Wrapper method for deep_is_physical(), takes the name of a type
+   check_is_physical(name: string): bool is {
+      var i_t:  rf_type = rf_manager.get_type_by_name(name);
+      assert i_t != NULL else error(append("Unknown type \"", name, "\". Make sure the type is defined in a module that is imported earlier than the macro call"));
+      result = TRUE;
+      #ifndef MZ_PACKING_NOT_PHYSICAL {
+         if (i_t is a rf_struct) or (i_t is a rf_list) {
+            result = deep_is_physical(i_t);
+         };
       };
    };
    
@@ -147,7 +167,7 @@ struct vlab_memoize_manager_s like any_struct {
 };
 
 -- MEMOIZE macro
-define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES[ ]=[ ]]<max_entries'num>][ PACKING[ ]=[ ]<packing'any>]<org'name>[ ]\(<args'name>,...\)[ ]\:[ ]<ret'type>[ ][@<edge'any>] is <block>" as computed {
+define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE [MAX_ENTRIES[ ]=[ ]<max_entries'num>][ PACKING[ ]=[ ]<packing'any>]<org'name>[ ]\(<args'name>,...\)[ ]\:[ ]<ret'type>[ ][@<edge'any>] is <block>" as computed {
    var rl: list of string;
    
    -- extract the macro parameters
@@ -166,7 +186,7 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
    for each in (<args'names>) {
       var arg: list of string;
       arg = str_split(it, ":"); 
-      assert arg.size() == 2 else error("Invalid input parameter list in macro call.");
+      assert arg.size() == 2 else error(appendf("Invalid input parameter list in macro call (trouble with \"%s\").", it));
       arg = arg.apply(str_trim(it));
       #ifdef DEBUG_MEMOIZE {
          outf(">>> [%s]:[%s]\n", arg[0], arg[1]);
@@ -176,19 +196,13 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
    
    -- validate the method input parameters
    for i from 0 to i_names.size() -1 {
-      var i_t:  rf_type = rf_manager.get_type_by_name(i_types[i]);
-      if (i_t is a rf_struct) or (i_t is a rf_list) {
-         assert util.mz_manager.deep_is_physical(i_types[i])
-           else error("Input parameter \"", i_names[i], "\" is not physical! Error in macro call.");
-      };
+      assert util.mz_manager.check_is_physical(i_types[i])
+        else error("Input parameter \"", i_names[i], "\" of type \"", i_types[i],"\" is not physical! Error in macro call.");
    };
    -- validate the result parameter
    var ret: string = <ret'type>;
-   var r_t: rf_type = rf_manager.get_type_by_name(ret);
-   if (r_t is a rf_struct) or (r_t is a rf_list) {
-      assert util.mz_manager.deep_is_physical(ret)
-        else error("Output parameter \"", ret, "\" is not physical! Error in macro call.");
-   };
+   assert util.mz_manager.check_is_physical(ret)
+     else error("Output parameter of type \"", ret, " is not physical! Error in macro call.");
 
    #ifdef DEBUG_MEMOIZE {
       outf(">>> result: %s\n", ret);
@@ -196,7 +210,7 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
    };
    
    -- create code to instantiate the cache object
-   rl.add(appendf("!%s_memoized_cache: list (key: hash) of vlab_memoize_cache_entries_s;", <org'name>));
+   rl.add(appendf("!%s_memoized_cache: list (key: hash) of vlab_memoize_cache_entry_s;", <org'name>));
    
    -- wrap the original function with the memoization code
    var ret_type: string = append(":", ret);
@@ -208,7 +222,7 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
    rl.add(appendf("   var search_key: uint = util.mz_manager.DJBHash(search_input);                   "));
    rl.add(appendf("   var key_idx: int = %s_memoized_cache.key_index(search_key);                    ", <org'name>));
    rl.add(appendf("   if key_idx != UNDEF {                                                          "));
-   rl.add(appendf("      var entry: vlab_memoize_cache_entries_s =  %s_memoized_cache[key_idx];      ", <org'name>));
+   rl.add(appendf("      var entry: vlab_memoize_cache_entry_s =  %s_memoized_cache[key_idx];      ", <org'name>));
    for i from 0 to i_names.size()-1 do {
       rl.add(appendf("      var %s0:%s;                                                              ", i_names[i], i_types[i]));
    };
@@ -224,7 +238,7 @@ define <vlab_memoize_pure_method_decorator'struct_member> "MEMOIZE[ [MAX_ENTRIES
    rl.add(appendf("   };                                                                             "));
    rl.add(appendf("   if not hit {                                                                   "));   
    rl.add(appendf("      %s;", str_expand_dots(<block>)));   
-   rl.add(appendf("      var new_entry: vlab_memoize_cache_entries_s = new with {     "));    
+   rl.add(appendf("      var new_entry: vlab_memoize_cache_entry_s = new with {     "));    
    rl.add(appendf("         .input  = search_input;                                   "));
    rl.add(appendf("         .output = pack(packing.low, result);                      "));
    rl.add(appendf("      };                                                           "));
