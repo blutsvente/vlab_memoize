@@ -31,7 +31,14 @@ Project         : vlab_memoize
 
 Creation Date   : 23.02.2013 
 
-Description     : Core package module of vlab_memoize
+Description     : Core package module of vlab_memoize;
+
+Memoize a pure method at the place of its definitions using the macro
+  MEMOIZE [MAX_ENTRIES[ ]=[ ]<max_entries'num>][ PACKING[ ]=[ ]<packing'any>] <method-definition>
+
+Switches:
+Define MZ_PACKING_NOT_PHYSICAL to lift the restriction for non-physical struct-fields.
+Define DEBUG_MEMOIZE for miss/hit statistics and additional debug output.
 
        $Revision:$
 
