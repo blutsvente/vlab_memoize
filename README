@@ -1,2 +1,8 @@
 A Specman/e package that provides a memoization utility for methods.
 
+Given a pure method definition, e.g. 
+	  foo(a: uint): int { ... }
+you can memoize it at the place of its definition by 
+	MEMOIZE foo(a: uint): int { ... }
+ 
+See also examples/test_memoize.e. You can also run demo.sh (might need adjustment to work with your Specman installation).
