@@ -2,9 +2,9 @@
 
 * Name: vlab_memoize
 
-* Version: 1.0.0
+* Version: 1.0.1
 
-* Modified: 16-Dec-2012
+* Modified: 08-May-2018
 
 * Category: utility
 
